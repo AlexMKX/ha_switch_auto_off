@@ -1,0 +1,3 @@
+ha_switch_auto_off:
+  class: ha_switch_auto_off
+  module: ha_switch_auto_off

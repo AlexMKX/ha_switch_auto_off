@@ -1,0 +1,31 @@
+#!*yaml*
+
+sensors:
+
+  # kitchen
+  # keep the lights on based on template value
+  - sensors:
+      - binary_sensor.f1_kitchen_occupancy
+    switches:
+      - light.bar
+      - light.boxes
+      - light.cooking
+      - light.dinner
+      - light.workzone
+      - switch.f1_bathroom_preheater_pump
+    delay: "{{ 3 if states('switch.f1_hall_projector_switch') =='on' else 21 }}"
+# keep light on if they are on for 20 minutes until any of the sensors indicate that they are not occupied
+  - sensors:
+      - binary_sensor.occupancy_f1_hallway_door_out_contact
+      - binary_sensor.out_porch_motion_1
+      - binary_sensor.occupancy_f1_porch_kitchen_door_contact
+      - binary_sensor.occupancy_mast_glass_door_contact
+      - binary_sensor.occupancy_mast_metal_door_contact
+      - binary_sensor.out_porch_parking_motion
+    #  - binary_sensor.out_porch_door_motion_1_occupancy
+    #      - binary_sensor.out_porch_parking_motion_1_occupancy
+    switches:
+      - light.out_light_all
+    delay: 20
+# switches light ttls after power on
+switches:
