@@ -7,6 +7,18 @@ import yaml
 from collections import defaultdict
 import datetime
 
+import time
+import appdaemon.plugins.hass.hassapi as hass
+import threading
+
+import os
+import sys
+from appdaemon.__main__ import main
+
+if __name__ == '__main__':
+    sys.argv.extend(['-c', '../'])
+    sys.exit(main())
+
 
 class switchData:
     deadline: datetime.datetime
@@ -25,6 +37,26 @@ class sensorData:
 
     def __init__(self):
         self.switches = []
+
+
+def entity_turns_on(entity, before, after):
+    domain, entity = entity.split('.')
+    if domain == "climate":
+        return after != 'off'
+    if (before, after) in ('off', 'on'):
+        return True
+
+
+def entity_is_on(states):
+    entity_id = states.get('entity_id')
+    if not entity_id:
+        return False
+    if states.get('state') in ['unavailable', 'unknown']:
+        return False
+    domain, entity = states['entity_id'].split('.')
+    if domain == "climate":
+        return states.get('state') != 'off'
+    return states.get('state') == 'on'
 
 
 class ha_switch_auto_off(hass.Hass):
@@ -47,12 +79,12 @@ class ha_switch_auto_off(hass.Hass):
     def on_state(self, entity, attribute, before, after, *args):
         if self.mutex.acquire(blocking=True, timeout=10):
             try:
-                if entity in self.switches.keys() and (before, after) == ('off', 'on'):
+                if entity in self.switches.keys() and entity_turns_on(entity, before, after):
                     switch: switchData = self.switches[entity]
                     switch.turned_on = datetime.datetime.now()
                     switch.deadline = max(datetime.datetime.now() + datetime.timedelta(minutes=switch.timeout),
                                           switch.deadline)
-                    self.log(f'{entity} {before}->{after} deadline {switch.deadline}', level='DEBUG')
+                    self.log(f'{entity} {before}->{after} deadline {switch.deadline}')
             finally:
                 self.mutex.release()
         pass
@@ -61,7 +93,9 @@ class ha_switch_auto_off(hass.Hass):
         if self.mutex.acquire(blocking=False):
             states = self.get_state()
             to_off = [x for x in self.switches.items() if
-                      x[1].deadline < datetime.datetime.now() and states.get(x[0], {}).get('state') == 'on']
+                      x[1].deadline < datetime.datetime.now() and entity_is_on(states.get(x[0], {}))]
+            self.log(f'turn off entities {[x[0] for x in to_off]}')
+
             [self.turn_off(x[0]) for x in to_off]
             self.mutex.release()
         pass
@@ -79,8 +113,7 @@ class ha_switch_auto_off(hass.Hass):
                         minutes=self.sensors[x].delay), self.switches[s].deadline)
                     if self.switches[s].deadline != deadline_before:
                         self.log(
-                            f'Deadline change for {s} because of {x} {deadline_before}->{self.switches[s].deadline}',
-                            level='DEBUG')
+                            f'Deadline change for {s} because of {x} {deadline_before}->{self.switches[s].deadline}')
             self.mutex.release()
         pass
 
